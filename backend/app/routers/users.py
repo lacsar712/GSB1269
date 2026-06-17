@@ -5,7 +5,7 @@ from app.database import get_db
 from app.models.user import User, Role
 from app.schemas.user import UserCreate, UserUpdate, UserResponse, RoleCreate, RoleResponse
 from app.schemas.common import PaginatedResponse, MessageResponse
-from app.services.auth import get_password_hash, get_current_active_user
+from app.services.auth import get_password_hash, get_current_active_user, get_current_admin_user, is_admin
 
 router = APIRouter(prefix="/api/users", tags=["用户管理"])
 
@@ -57,7 +57,7 @@ def get_users(
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     if db.query(User).filter(User.username == user_data.username).first():
         raise HTTPException(status_code=400, detail="用户名已存在")
@@ -127,7 +127,15 @@ def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
     
-    for field, value in user_data.model_dump(exclude_unset=True).items():
+    update_data = user_data.model_dump(exclude_unset=True)
+    
+    if not is_admin(current_user):
+        if "role_id" in update_data:
+            raise HTTPException(status_code=403, detail="无权限修改角色")
+        if "is_active" in update_data:
+            raise HTTPException(status_code=403, detail="无权限修改用户状态")
+    
+    for field, value in update_data.items():
         setattr(user, field, value)
     
     db.commit()
@@ -152,7 +160,7 @@ def update_user(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
@@ -179,7 +187,7 @@ def get_roles(
 def create_role(
     role_data: RoleCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_admin_user)
 ):
     if db.query(Role).filter(Role.code == role_data.code).first():
         raise HTTPException(status_code=400, detail="角色编码已存在")
