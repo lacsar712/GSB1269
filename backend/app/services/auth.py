@@ -67,3 +67,20 @@ async def get_current_active_user(
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="用户已被禁用")
     return current_user
+
+
+def is_admin(user: User) -> bool:
+    if not user.role:
+        return False
+    return user.role.code.lower() == "admin"
+
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user)
+) -> User:
+    if not is_admin(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
+    return current_user
