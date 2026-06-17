@@ -7,7 +7,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db
-from app.models.user import User
+from app.models.user import User, Role
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/login")
@@ -66,4 +66,23 @@ async def get_current_active_user(
 ) -> User:
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="用户已被禁用")
+    return current_user
+
+
+def is_admin(user: User, db: Session) -> bool:
+    if not user.role_id:
+        return False
+    role = db.query(Role).filter(Role.id == user.role_id).first()
+    return role is not None and role.code == "admin"
+
+
+async def get_current_admin_user(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+) -> User:
+    if not is_admin(current_user, db):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="需要管理员权限"
+        )
     return current_user
